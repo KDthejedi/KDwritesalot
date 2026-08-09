@@ -9,10 +9,13 @@ import { createRevision, type Revision as ProvRevision } from "@/lib/provenance"
 import { emptyScreenplay, type Screenplay } from "@/lib/screenplay/types";
 import type {
   CollaboratorInfo,
+  CommentAnchor,
+  CommentInfo,
   Role,
   ScreenplaySummary,
   StoredScreenplay,
 } from "@/lib/store/types";
+import type { Prisma } from "@prisma/client";
 
 export class AccessError extends Error {
   constructor(
@@ -247,4 +250,95 @@ export async function removeCollaborator(
   if (actorRole === null) throw new AccessError(404, "Not found");
   if (actorRole !== "OWNER") throw new AccessError(403, "Only the owner can manage sharing");
   await prisma.collaborator.delete({ where: { id: collaboratorId } });
+}
+
+// --- Comments ----------------------------------------------------------------
+
+function toCommentInfo(c: {
+  id: string;
+  authorId: string;
+  body: string;
+  anchor: Prisma.JsonValue;
+  threadId: string | null;
+  resolved: boolean;
+  createdAt: Date;
+  author?: { name: string | null } | null;
+}): CommentInfo {
+  return {
+    id: c.id,
+    authorId: c.authorId,
+    authorName: c.author?.name ?? null,
+    body: c.body,
+    anchor: (c.anchor as CommentAnchor | null) ?? null,
+    threadId: c.threadId,
+    resolved: c.resolved,
+    createdAt: c.createdAt.toISOString(),
+  };
+}
+
+/** List all comments on a screenplay (any role with access). */
+export async function listComments(id: string, userId: string): Promise<CommentInfo[]> {
+  const role = await resolveRole(id, userId);
+  if (role === null) throw new AccessError(404, "Not found");
+  const rows = await prisma.comment.findMany({
+    where: { screenplayId: id },
+    include: { author: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(toCommentInfo);
+}
+
+/** Add a comment or reply (OWNER, EDITOR, or COMMENTER). */
+export async function addComment(
+  id: string,
+  userId: string,
+  input: { body: string; anchor?: CommentAnchor | null; threadId?: string | null },
+): Promise<CommentInfo> {
+  const role = await resolveRole(id, userId);
+  if (role === null) throw new AccessError(404, "Not found");
+  if (role === "VIEWER") throw new AccessError(403, "Viewers cannot comment");
+  const body = input.body.trim();
+  if (!body) throw new AccessError(403, "Comment cannot be empty");
+  const row = await prisma.comment.create({
+    data: {
+      screenplayId: id,
+      authorId: userId,
+      body,
+      anchor: (input.anchor ?? undefined) as Prisma.InputJsonValue | undefined,
+      threadId: input.threadId ?? null,
+    },
+    include: { author: { select: { name: true } } },
+  });
+  return toCommentInfo(row);
+}
+
+/** Resolve or reopen a comment (OWNER, EDITOR, or COMMENTER). */
+export async function setCommentResolved(
+  id: string,
+  userId: string,
+  commentId: string,
+  resolved: boolean,
+): Promise<void> {
+  const role = await resolveRole(id, userId);
+  if (role === null) throw new AccessError(404, "Not found");
+  if (role === "VIEWER") throw new AccessError(403, "Viewers cannot change comments");
+  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!comment || comment.screenplayId !== id) throw new AccessError(404, "Comment not found");
+  await prisma.comment.update({ where: { id: commentId }, data: { resolved } });
+}
+
+/** Delete a comment (its author, or the screenplay owner). */
+export async function deleteComment(
+  id: string,
+  userId: string,
+  commentId: string,
+): Promise<void> {
+  const role = await resolveRole(id, userId);
+  if (role === null) throw new AccessError(404, "Not found");
+  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  if (!comment || comment.screenplayId !== id) throw new AccessError(404, "Comment not found");
+  if (comment.authorId !== userId && role !== "OWNER") {
+    throw new AccessError(403, "Only the author or owner can delete this comment");
+  }
+  await prisma.comment.delete({ where: { id: commentId } });
 }

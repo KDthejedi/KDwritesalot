@@ -5,14 +5,16 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
+import { useSession } from "next-auth/react";
 import CollaborativeEditor from "@/components/editor/CollaborativeEditor";
 import SharePanel from "@/components/editor/SharePanel";
+import CommentsPanel from "@/components/editor/CommentsPanel";
 import type { Screenplay, TitlePage } from "@/lib/screenplay/types";
 import { serialize } from "@/lib/screenplay/fountain";
 import { safeFilename } from "@/lib/export/filename";
 import { buildProvenanceRecord, verifyChain, type Revision } from "@/lib/provenance";
 import { getScreenplay, saveDoc, saveRevision } from "@/lib/store/remote";
-import { canEdit, type Role } from "@/lib/store/types";
+import { canComment, canEdit, type Role } from "@/lib/store/types";
 import { initFromScreenplay, setTitleField } from "@/lib/collab/ydoc";
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -30,9 +32,12 @@ export default function EditorPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
+  const { data: session } = useSession();
   const doc = useMemo(() => new Y.Doc(), []);
   const providerRef = useRef<HocuspocusProvider | null>(null);
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [activeElement, setActiveElement] = useState<{ id: string; quote: string } | null>(null);
 
   const [loadState, setLoadState] = useState<"loading" | "ok" | "notfound">("loading");
   const [ready, setReady] = useState(false);
@@ -228,6 +233,7 @@ export default function EditorPage() {
           onChange={(e) => updateMeta("title", e.target.value)}
           placeholder="Untitled Screenplay"
           readOnly={!editable}
+          aria-label="Screenplay title"
           className="min-w-40 flex-1 rounded border border-transparent bg-transparent px-2 py-1 font-medium hover:border-neutral-300 focus:border-neutral-400 focus:outline-none"
         />
         {!editable && (
@@ -250,6 +256,13 @@ export default function EditorPage() {
             Share
           </button>
         )}
+        <button
+          onClick={() => setShowComments((v) => !v)}
+          className="rounded border px-2 py-1"
+          aria-pressed={showComments}
+        >
+          Comments
+        </button>
         <div className="mx-1 h-5 w-px bg-neutral-200 dark:bg-neutral-700" />
         <button onClick={() => exportServer("pdf")} className="rounded border px-2 py-1">
           PDF
@@ -271,6 +284,7 @@ export default function EditorPage() {
               provider={provider}
               readOnly={!editable}
               onDocChange={handleDocChange}
+              onActiveElementChange={setActiveElement}
             />
           ) : (
             <p className="text-neutral-500">Connecting to the live document…</p>
@@ -279,6 +293,15 @@ export default function EditorPage() {
 
         <aside className="hidden w-72 shrink-0 space-y-6 lg:block">
           {showShare && role === "OWNER" && <SharePanel screenplayId={id} />}
+
+          {showComments && (
+            <CommentsPanel
+              screenplayId={id}
+              canComment={canComment(role)}
+              currentUserId={session?.user?.id}
+              activeElement={activeElement}
+            />
+          )}
 
           {showMeta && editable && (
             <section className="rounded-lg border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-950">

@@ -107,5 +107,20 @@ npm run dev
 Open the same screenplay in two sessions to co-write live with presence
 indicators. The shared document is a Yjs CRDT (character-level merge), persisted
 to Postgres (`CollabDoc`); the canonical `Screenplay` JSON is still saved to
-`Screenplay.content` for export and version history. In production, deploy the
-collab server and set `NEXT_PUBLIC_COLLAB_URL` (use `wss://`).
+`Screenplay.content` for export and version history.
+
+## Deployment
+
+- **App** → Vercel (or any Node host). Set all the env vars from `.env.example`;
+  run `npx prisma migrate deploy` (or `db:push`) against your database. `pdfkit`
+  is already marked external so its fonts resolve in the server build.
+- **Collab server** → any host that supports long-lived WebSockets
+  (Fly.io / Railway / Render / a container platform). A `Dockerfile` is provided:
+
+  ```bash
+  docker build -f collab-server/Dockerfile -t kdwritesalot-collab .
+  docker run -p 1234:1234 --env-file .env kdwritesalot-collab
+  ```
+
+  Give it the **same** `DATABASE_URL` and `AUTH_SECRET` as the app, then point
+  the app's `NEXT_PUBLIC_COLLAB_URL` at it over TLS (`wss://your-collab-host`).

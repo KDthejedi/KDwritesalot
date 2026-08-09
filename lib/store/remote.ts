@@ -7,6 +7,8 @@ import type { Screenplay } from "@/lib/screenplay/types";
 import type { Revision } from "@/lib/provenance";
 import type {
   CollaboratorInfo,
+  CommentAnchor,
+  CommentInfo,
   Role,
   ScreenplaySummary,
   StoredScreenplay,
@@ -96,5 +98,47 @@ export async function removeCollaborator(id: string, collaboratorId: string): Pr
     await fetch(`/api/screenplays/${id}/collaborators?collaboratorId=${collaboratorId}`, {
       method: "DELETE",
     }),
+  );
+}
+
+export async function listComments(id: string): Promise<CommentInfo[]> {
+  const data = await unwrap<{ items: CommentInfo[] }>(
+    await fetch(`/api/screenplays/${id}/comments`),
+  );
+  return data.items;
+}
+
+export async function addComment(
+  id: string,
+  body: string,
+  anchor?: CommentAnchor | null,
+  threadId?: string | null,
+): Promise<CommentInfo> {
+  return unwrap<CommentInfo>(
+    await fetch(`/api/screenplays/${id}/comments`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ body, anchor, threadId }),
+    }),
+  );
+}
+
+export async function setCommentResolved(
+  id: string,
+  commentId: string,
+  resolved: boolean,
+): Promise<void> {
+  await unwrap(
+    await fetch(`/api/screenplays/${id}/comments/${commentId}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ resolved }),
+    }),
+  );
+}
+
+export async function deleteComment(id: string, commentId: string): Promise<void> {
+  await unwrap(
+    await fetch(`/api/screenplays/${id}/comments/${commentId}`, { method: "DELETE" }),
   );
 }

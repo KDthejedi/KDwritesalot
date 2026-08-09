@@ -35,6 +35,7 @@ interface Props {
   provider: HocuspocusProvider | null;
   readOnly?: boolean;
   onDocChange?: (doc: Screenplay) => void;
+  onActiveElementChange?: (active: { id: string; quote: string } | null) => void;
 }
 
 const PALETTE = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
@@ -44,7 +45,13 @@ function colorFor(name: string): string {
   return PALETTE[h];
 }
 
-export default function CollaborativeEditor({ doc, provider, readOnly = false, onDocChange }: Props) {
+export default function CollaborativeEditor({
+  doc,
+  provider,
+  readOnly = false,
+  onDocChange,
+  onActiveElementChange,
+}: Props) {
   const [, forceRender] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [remote, setRemote] = useState<RemoteUser[]>([]);
@@ -102,6 +109,17 @@ export default function CollaborativeEditor({ doc, provider, readOnly = false, o
     },
     [provider],
   );
+
+  // Report the active element (for anchoring comments) to the parent.
+  useEffect(() => {
+    if (!onActiveElementChange) return;
+    if (!activeId) {
+      onActiveElementChange(null);
+      return;
+    }
+    const el = readElements(doc).find((e) => e.id === activeId);
+    onActiveElementChange(el ? { id: el.id, quote: el.text.slice(0, 60) } : null);
+  }, [activeId, doc, onActiveElementChange]);
 
   // Restore caret after a re-render driven by document changes.
   useLayoutEffect(() => {

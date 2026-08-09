@@ -40,3 +40,26 @@ export interface CollaboratorInfo {
 export function canEdit(role: Role | undefined): boolean {
   return role === "OWNER" || role === "EDITOR";
 }
+
+/** Whether a role may post comments (everyone except a plain Viewer). */
+export function canComment(role: Role | undefined): boolean {
+  return role === "OWNER" || role === "EDITOR" || role === "COMMENTER";
+}
+
+/** Where a comment is anchored in the document. */
+export interface CommentAnchor {
+  elementId?: string;
+  /** A short quote of the anchored text, for display if the element moves. */
+  quote?: string;
+}
+
+export interface CommentInfo {
+  id: string;
+  authorId: string;
+  authorName: string | null;
+  body: string;
+  anchor: CommentAnchor | null;
+  threadId: string | null;
+  resolved: boolean;
+  createdAt: string;
+}
