@@ -7,23 +7,10 @@
  * need to change. All functions are no-ops on the server (no localStorage).
  */
 
-import { emptyScreenplay, type Screenplay } from "@/lib/screenplay/types";
-import type { Revision } from "@/lib/provenance";
+import { emptyScreenplay } from "@/lib/screenplay/types";
+import type { ScreenplaySummary, StoredScreenplay } from "./types";
 
-export interface StoredScreenplay {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  doc: Screenplay;
-  revisions: Revision[];
-}
-
-export interface ScreenplaySummary {
-  id: string;
-  title: string;
-  updatedAt: string;
-}
+export type { ScreenplaySummary, StoredScreenplay } from "./types";
 
 const INDEX_KEY = "kd:index";
 const docKey = (id: string) => `kd:doc:${id}`;

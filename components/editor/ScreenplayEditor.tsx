@@ -41,9 +41,16 @@ interface Props {
   /** Controlled title-page metadata (owned by the parent page). */
   titlePage: Screenplay["titlePage"];
   onChange?: (doc: Screenplay) => void;
+  /** When true, the document is displayed but cannot be edited. */
+  readOnly?: boolean;
 }
 
-export default function ScreenplayEditor({ initialDoc, titlePage, onChange }: Props) {
+export default function ScreenplayEditor({
+  initialDoc,
+  titlePage,
+  onChange,
+  readOnly = false,
+}: Props) {
   const [elements, setElements] = useState<EditorElement[]>(() => toEditorElements(initialDoc));
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -70,20 +77,29 @@ export default function ScreenplayEditor({ initialDoc, titlePage, onChange }: Pr
 
   const characters = useMemo(() => collectCharacterNames(elements), [elements]);
 
-  const updateText = useCallback((id: string, text: string) => {
-    setElements((prev) =>
-      prev.map((el) => (el.id === id ? { ...el, text: formatText(el.type, text) } : el)),
-    );
-  }, []);
+  const updateText = useCallback(
+    (id: string, text: string) => {
+      if (readOnly) return;
+      setElements((prev) =>
+        prev.map((el) => (el.id === id ? { ...el, text: formatText(el.type, text) } : el)),
+      );
+    },
+    [readOnly],
+  );
 
-  const setType = useCallback((id: string, type: ElementType) => {
-    setElements((prev) =>
-      prev.map((el) => (el.id === id ? { ...el, type, text: formatText(type, el.text) } : el)),
-    );
-  }, []);
+  const setType = useCallback(
+    (id: string, type: ElementType) => {
+      if (readOnly) return;
+      setElements((prev) =>
+        prev.map((el) => (el.id === id ? { ...el, type, text: formatText(type, el.text) } : el)),
+      );
+    },
+    [readOnly],
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>, el: EditorElement, index: number) => {
+      if (readOnly) return;
       const ta = e.currentTarget;
 
       // Tab / Shift+Tab: cycle the element's type.
@@ -132,7 +148,7 @@ export default function ScreenplayEditor({ initialDoc, titlePage, onChange }: Pr
         return;
       }
     },
-    [setType],
+    [setType, readOnly],
   );
 
   const acceptSuggestion = useCallback((id: string, value: string) => {
@@ -169,6 +185,7 @@ export default function ScreenplayEditor({ initialDoc, titlePage, onChange }: Pr
                 onKeyDown={(e) => handleKeyDown(e, el, index)}
                 onFocus={() => setActiveId(el.id)}
                 onBlur={() => setActiveId((cur) => (cur === el.id ? null : cur))}
+                readOnly={readOnly}
                 rows={1}
                 spellCheck={el.type === "action" || el.type === "dialogue"}
                 className="my-0 block resize-none overflow-hidden border-0 bg-transparent p-0 leading-[1] outline-none focus:bg-yellow-50"

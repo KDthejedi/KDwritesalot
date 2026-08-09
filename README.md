@@ -27,13 +27,31 @@ authorship over time.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in as you enable each phase
+cp .env.example .env         # fill in DATABASE_URL/DIRECT_URL + auth
+npm run db:push              # create tables in your Postgres
 npm run dev                  # http://localhost:3000
 ```
 
-The landing page and screenplay **engine** (Fountain, FDX, PDF, provenance) run
-with no external services. Database, auth, and real-time collaboration require
-the environment variables described in `.env.example`.
+The screenplay **engine** (Fountain, FDX, PDF, provenance) runs with no external
+services. Accounts and cloud storage require a Postgres database and Google
+OAuth (below). Real-time collaboration (Phase B) is not built yet.
+
+### Cloud setup (Supabase + Google)
+
+1. **Database** — create a Supabase project; from Project Settings → Database
+   copy the pooled connection string into `DATABASE_URL` (port 6543,
+   `?pgbouncer=true`) and the direct string into `DIRECT_URL` (port 5432). Run
+   `npm run db:push`.
+2. **Google sign-in** — create an OAuth client (Web) in Google Cloud, add
+   redirect URI `<app-url>/api/auth/callback/google`, and set `AUTH_GOOGLE_ID`,
+   `AUTH_GOOGLE_SECRET`, and `AUTH_SECRET` (`openssl rand -base64 32`).
+3. `npm run dev`, open `/dashboard`, sign in, and your screenplays now persist to
+   the database. Share a screenplay from the editor (Editor / Commenter / Viewer
+   roles); invitees must have signed in once so their account exists.
+
+For local development or automated tests without Google, set
+`ENABLE_DEV_LOGIN="true"` (never in production) to enable a passwordless
+Credentials login on `/signin`.
 
 ## Scripts
 
@@ -63,23 +81,13 @@ Built in phases.
 - **Phase 2b** — Editor UI with industry formatting behaviors ✅
 - **Phase 3** — Export (PDF + FDX + Fountain, title page from metadata) ✅
 - **Phase 4** — Version history & provenance (snapshots, hash chain, export) ✅
-- **Phase 1** — Cloud data model (Prisma schema ✅); Auth.js + API-backed
-  store are the next step (needs a database + OAuth credentials).
-- **Phase 5** — Real-time collaboration, sharing, comments (needs Liveblocks).
+- **Phase 1/A** — Cloud: Auth.js (Google) + Supabase Postgres, API-backed
+  store, sharing with roles, read-only enforcement ✅
+- **Phase B** — Real-time collaboration (Yjs), presence, comments — next.
 - **Phase 6** — Hardening (security review, a11y, broader tests).
 
-### What works today (no external services)
+### Sharing & roles
 
-`npm run dev`, open `/dashboard`, create a screenplay, and write with
-Final Draft-style formatting. Save timestamped/hashed versions, and export
-PDF, Final Draft `.fdx`, Fountain, and a JSON provenance record. Screenplays
-are stored in your browser (localStorage).
-
-### Enabling the cloud phase
-
-1. Provision Postgres and set `DATABASE_URL` (see `.env.example`).
-2. `npm run db:push` to create the tables from `prisma/schema.prisma`.
-3. Add Auth.js providers (`AUTH_SECRET`, OAuth id/secret) and swap
-   `lib/store/local.ts` for API routes backed by Prisma — the stored shapes
-   already match the schema.
-4. For real-time co-writing, add Liveblocks keys and layer Yjs onto the editor.
+Owners can invite collaborators by email as **Editor** (full edit),
+**Commenter** (read + comment, comments land in Phase B), or **Viewer**
+(read-only). Roles are enforced both in the UI and in every API route.

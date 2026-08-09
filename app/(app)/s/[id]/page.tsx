@@ -4,21 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import ScreenplayEditor from "@/components/editor/ScreenplayEditor";
+import SharePanel from "@/components/editor/SharePanel";
 import type { Screenplay, TitlePage } from "@/lib/screenplay/types";
 import { serialize } from "@/lib/screenplay/fountain";
 import { safeFilename } from "@/lib/export/filename";
-import {
-  buildProvenanceRecord,
-  createRevision,
-  verifyChain,
-  type Revision,
-} from "@/lib/provenance";
-import {
-  getScreenplay,
-  newId,
-  saveScreenplay,
-  type StoredScreenplay,
-} from "@/lib/store/local";
+import { buildProvenanceRecord, verifyChain, type Revision } from "@/lib/provenance";
+import { getScreenplay, saveDoc, saveRevision } from "@/lib/store/remote";
+import { canEdit, type Role } from "@/lib/store/types";
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -35,46 +27,55 @@ export default function EditorPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
-  const [record, setRecord] = useState<StoredScreenplay | null | undefined>(undefined);
+  const [loadState, setLoadState] = useState<"loading" | "ok" | "notfound">("loading");
+  const [initialDoc, setInitialDoc] = useState<Screenplay | null>(null);
   const [titlePage, setTitlePage] = useState<TitlePage>({});
+  const [role, setRole] = useState<Role>("VIEWER");
   const [showMeta, setShowMeta] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   const [status, setStatus] = useState("");
+  const [revisionsView, setRevisionsView] = useState<Revision[]>([]);
 
   const docRef = useRef<Screenplay>({ titlePage: {}, elements: [] });
   const revisionsRef = useRef<Revision[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load the screenplay once on mount.
+  const editable = canEdit(role);
+
   useEffect(() => {
-    const rec = getScreenplay(id);
-    setRecord(rec);
-    if (rec) {
-      setTitlePage(rec.doc.titlePage ?? {});
-      docRef.current = rec.doc;
-      revisionsRef.current = rec.revisions ?? [];
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rec = await getScreenplay(id);
+        if (cancelled) return;
+        setInitialDoc(rec.doc);
+        setTitlePage(rec.doc.titlePage ?? {});
+        setRole(rec.role ?? "VIEWER");
+        docRef.current = rec.doc;
+        revisionsRef.current = rec.revisions ?? [];
+        setRevisionsView(rec.revisions ?? []);
+        setLoadState("ok");
+      } catch {
+        if (!cancelled) setLoadState("notfound");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const scheduleSave = useCallback(() => {
+    if (!editable) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      const rec = getScreenplay(id);
-      const base: StoredScreenplay =
-        rec ??
-        ({
-          id,
-          title: "Untitled Screenplay",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          doc: docRef.current,
-          revisions: [],
-        } as StoredScreenplay);
-      base.doc = docRef.current;
-      base.revisions = revisionsRef.current;
-      saveScreenplay(base);
-      setStatus(`Saved ${new Date().toLocaleTimeString()}`);
-    }, 600);
-  }, [id]);
+    saveTimer.current = setTimeout(async () => {
+      try {
+        await saveDoc(id, docRef.current);
+        setStatus(`Saved ${new Date().toLocaleTimeString()}`);
+      } catch (e) {
+        setStatus(e instanceof Error ? `Save failed: ${e.message}` : "Save failed");
+      }
+    }, 700);
+  }, [id, editable]);
 
   const handleEditorChange = useCallback(
     (doc: Screenplay) => {
@@ -85,6 +86,7 @@ export default function EditorPage() {
   );
 
   const updateMeta = (key: keyof TitlePage, value: string) => {
+    if (!editable) return;
     setTitlePage((prev) => {
       const next = { ...prev, [key]: value };
       docRef.current = { ...docRef.current, titlePage: next };
@@ -93,28 +95,17 @@ export default function EditorPage() {
     });
   };
 
-  const saveVersion = () => {
+  const saveVersion = async () => {
     const label = window.prompt("Name this version (optional):", "") ?? "";
     const message = window.prompt("Describe the change (optional):", "") ?? "";
-    const prev = revisionsRef.current[revisionsRef.current.length - 1] ?? null;
-    const rev = createRevision(
-      docRef.current,
-      {
-        id: newId(),
-        screenplayId: id,
-        authorId: "local",
-        authorName: "You",
-        createdAt: new Date().toISOString(),
-        label: label.trim() || undefined,
-        message: message.trim() || undefined,
-      },
-      prev,
-    );
-    revisionsRef.current = [...revisionsRef.current, rev];
-    scheduleSave();
-    setStatus(`Version saved (${rev.contentHash.slice(0, 10)}…)`);
-    // Force a re-render to show the new revision.
-    setRecord((r) => (r ? { ...r, revisions: revisionsRef.current } : r));
+    try {
+      const rev = await saveRevision(id, docRef.current, label.trim() || undefined, message.trim() || undefined);
+      revisionsRef.current = [...revisionsRef.current, rev];
+      setRevisionsView(revisionsRef.current);
+      setStatus(`Version saved (${rev.contentHash.slice(0, 10)}…)`);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Could not save version");
+    }
   };
 
   const exportServer = async (kind: "pdf" | "fdx") => {
@@ -128,14 +119,15 @@ export default function EditorPage() {
       setStatus(`Export failed (${res.status})`);
       return;
     }
-    const blob = await res.blob();
-    triggerDownload(blob, safeFilename(titlePage.title ?? "screenplay", kind));
+    triggerDownload(await res.blob(), safeFilename(titlePage.title ?? "screenplay", kind));
     setStatus(`${kind.toUpperCase()} exported`);
   };
 
   const exportFountain = () => {
-    const text = serialize(docRef.current);
-    triggerDownload(new Blob([text], { type: "text/plain" }), safeFilename(titlePage.title ?? "screenplay", "fountain"));
+    triggerDownload(
+      new Blob([serialize(docRef.current)], { type: "text/plain" }),
+      safeFilename(titlePage.title ?? "screenplay", "fountain"),
+    );
   };
 
   const exportProvenance = () => {
@@ -154,13 +146,13 @@ export default function EditorPage() {
     );
   };
 
-  if (record === undefined) {
+  if (loadState === "loading") {
     return <main className="p-12 text-neutral-500">Loading…</main>;
   }
-  if (record === null) {
+  if (loadState === "notfound" || !initialDoc) {
     return (
       <main className="p-12">
-        <p className="mb-4">Screenplay not found in this browser.</p>
+        <p className="mb-4">Screenplay not found, or you don&apos;t have access.</p>
         <Link href="/dashboard" className="underline">
           Back to your screenplays
         </Link>
@@ -168,12 +160,10 @@ export default function EditorPage() {
     );
   }
 
-  const revisions = revisionsRef.current;
-  const chainOk = verifyChain(revisions);
+  const chainOk = verifyChain(revisionsView);
 
   return (
-    <div className="min-h-screen bg-neutral-100 dark:bg-neutral-900">
-      {/* Toolbar */}
+    <div className="bg-neutral-100 dark:bg-neutral-900">
       <header className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-white px-4 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950">
         <Link href="/dashboard" className="text-neutral-500 hover:underline">
           ← All
@@ -182,14 +172,29 @@ export default function EditorPage() {
           value={titlePage.title ?? ""}
           onChange={(e) => updateMeta("title", e.target.value)}
           placeholder="Untitled Screenplay"
+          readOnly={!editable}
           className="min-w-40 flex-1 rounded border border-transparent bg-transparent px-2 py-1 font-medium hover:border-neutral-300 focus:border-neutral-400 focus:outline-none"
         />
-        <button onClick={() => setShowMeta((v) => !v)} className="rounded border px-2 py-1">
-          Title page
-        </button>
-        <button onClick={saveVersion} className="rounded border px-2 py-1">
-          Save version
-        </button>
+        {!editable && (
+          <span className="rounded bg-neutral-200 px-2 py-0.5 text-[10px] uppercase text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+            {role} · read-only
+          </span>
+        )}
+        {editable && (
+          <>
+            <button onClick={() => setShowMeta((v) => !v)} className="rounded border px-2 py-1">
+              Title page
+            </button>
+            <button onClick={saveVersion} className="rounded border px-2 py-1">
+              Save version
+            </button>
+          </>
+        )}
+        {role === "OWNER" && (
+          <button onClick={() => setShowShare((v) => !v)} className="rounded border px-2 py-1">
+            Share
+          </button>
+        )}
         <div className="mx-1 h-5 w-px bg-neutral-200 dark:bg-neutral-700" />
         <button onClick={() => exportServer("pdf")} className="rounded border px-2 py-1">
           PDF
@@ -204,18 +209,19 @@ export default function EditorPage() {
       </header>
 
       <div className="mx-auto flex max-w-6xl gap-6 px-4 py-6">
-        {/* Editor */}
         <div className="min-w-0 flex-1">
           <ScreenplayEditor
-            initialDoc={record.doc}
+            initialDoc={initialDoc}
             titlePage={titlePage}
             onChange={handleEditorChange}
+            readOnly={!editable}
           />
         </div>
 
-        {/* Side panel */}
         <aside className="hidden w-72 shrink-0 space-y-6 lg:block">
-          {showMeta && (
+          {showShare && role === "OWNER" && <SharePanel screenplayId={id} />}
+
+          {showMeta && editable && (
             <section className="rounded-lg border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-950">
               <h2 className="mb-3 font-semibold">Title page</h2>
               {(
@@ -243,24 +249,27 @@ export default function EditorPage() {
           <section className="rounded-lg border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-950">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">Version history</h2>
-              {revisions.length > 0 && (
+              {revisionsView.length > 0 && (
                 <span className={chainOk ? "text-xs text-green-600" : "text-xs text-red-600"}>
                   {chainOk ? "chain ✓" : "chain ✗"}
                 </span>
               )}
             </div>
-            {revisions.length === 0 ? (
+            {revisionsView.length === 0 ? (
               <p className="text-xs text-neutral-400">
-                No versions yet. Click “Save version” to record a timestamped,
-                hashed snapshot for your authorship trail.
+                No versions yet.{" "}
+                {editable
+                  ? "Click “Save version” to record a timestamped, hashed snapshot."
+                  : ""}
               </p>
             ) : (
               <ol className="space-y-2">
-                {[...revisions].reverse().map((r) => (
+                {[...revisionsView].reverse().map((r) => (
                   <li key={r.id} className="border-b border-neutral-100 pb-2 dark:border-neutral-800">
                     <div className="font-medium">{r.label ?? "(unnamed)"}</div>
                     <div className="text-xs text-neutral-500">
                       {new Date(r.createdAt).toLocaleString()}
+                      {r.authorName ? ` · ${r.authorName}` : ""}
                     </div>
                     {r.message && <div className="text-xs text-neutral-500">{r.message}</div>}
                     <code className="text-[10px] text-neutral-400">{r.contentHash.slice(0, 16)}…</code>
@@ -268,7 +277,7 @@ export default function EditorPage() {
                 ))}
               </ol>
             )}
-            {revisions.length > 0 && (
+            {revisionsView.length > 0 && (
               <button onClick={exportProvenance} className="mt-3 w-full rounded border px-2 py-1 text-xs">
                 Export provenance record (JSON)
               </button>
