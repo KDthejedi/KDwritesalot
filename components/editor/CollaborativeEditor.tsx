@@ -240,7 +240,9 @@ export default function CollaborativeEditor({
       )}
 
       <div className="screenplay-page mx-auto max-w-[8.5in] rounded bg-white p-[1in] text-black shadow-sm">
-        <div className="ml-[1.5in]">
+        {/* Page has 1in padding; add 0.5in so the text area starts at the
+            standard 1.5in left margin (matches lib/export/layout geometry). */}
+        <div className="ml-[0.5in]">
           {elements.map((el, index) => {
             const isActive = activeId === el.id;
             const remoteEditor = remote.find((u) => u.focusId === el.id);
@@ -256,7 +258,7 @@ export default function CollaborativeEditor({
                 <button
                   type="button"
                   onClick={() => changeType(index, el, cycleType(el.type))}
-                  className="absolute -left-[1.55in] top-0 hidden w-[1.4in] select-none text-right text-[9px] uppercase tracking-wide text-neutral-400 group-focus-within:block group-hover:block"
+                  className="absolute -left-[1.4in] top-0 hidden w-[1.3in] select-none text-right text-[9px] uppercase tracking-wide text-neutral-400 group-focus-within:block group-hover:block"
                   tabIndex={-1}
                   title="Click to change element type (or press Tab)"
                 >
