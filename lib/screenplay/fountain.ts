@@ -197,7 +197,7 @@ export function parse(input: string): Screenplay {
 
     // Forced action: !text
     if (trimmed.startsWith("!")) {
-      const { text, next } = collectParagraph(lines, i, () => true);
+      const { text, next } = collectParagraph(lines, i);
       elements.push({ type: "action", text: stripFirstChar(text) });
       i = next;
       continue;
@@ -232,7 +232,7 @@ export function parse(input: string): Screenplay {
 
     // Default: action paragraph (consecutive non-blank lines).
     {
-      const { text, next } = collectParagraph(lines, i, () => false);
+      const { text, next } = collectParagraph(lines, i);
       elements.push({ type: "action", text });
       i = next;
     }
@@ -249,7 +249,6 @@ function stripFirstChar(text: string): string {
 function collectParagraph(
   lines: string[],
   start: number,
-  _force: () => boolean,
 ): { text: string; next: number } {
   const buf: string[] = [];
   let i = start;

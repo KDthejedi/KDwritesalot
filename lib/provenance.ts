@@ -8,7 +8,7 @@
  * hashes, exported as a provenance record, documents what existed and when.
  */
 
-import { createHash } from "node:crypto";
+import { sha256Hex } from "./crypto/sha256";
 import { serialize } from "./screenplay/fountain";
 import type { Screenplay } from "./screenplay/types";
 
@@ -24,7 +24,7 @@ export function hashScreenplay(doc: Screenplay): string {
 
 /** SHA-256 hex digest of an arbitrary string. */
 export function sha256(text: string): string {
-  return createHash("sha256").update(text, "utf8").digest("hex");
+  return sha256Hex(text);
 }
 
 /** A single immutable revision in a screenplay's history. */

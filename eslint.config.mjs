@@ -14,6 +14,14 @@ const eslintConfig = [
   {
     ignores: [".next/**", "node_modules/**"],
   },
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;
