@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import ScreenplayEditor from "@/components/editor/ScreenplayEditor";
+import * as Y from "yjs";
+import { HocuspocusProvider } from "@hocuspocus/provider";
+import CollaborativeEditor from "@/components/editor/CollaborativeEditor";
 import SharePanel from "@/components/editor/SharePanel";
 import type { Screenplay, TitlePage } from "@/lib/screenplay/types";
 import { serialize } from "@/lib/screenplay/fountain";
@@ -11,6 +13,7 @@ import { safeFilename } from "@/lib/export/filename";
 import { buildProvenanceRecord, verifyChain, type Revision } from "@/lib/provenance";
 import { getScreenplay, saveDoc, saveRevision } from "@/lib/store/remote";
 import { canEdit, type Role } from "@/lib/store/types";
+import { initFromScreenplay, setTitleField } from "@/lib/collab/ydoc";
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -27,8 +30,12 @@ export default function EditorPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
+  const doc = useMemo(() => new Y.Doc(), []);
+  const providerRef = useRef<HocuspocusProvider | null>(null);
+  const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
+
   const [loadState, setLoadState] = useState<"loading" | "ok" | "notfound">("loading");
-  const [initialDoc, setInitialDoc] = useState<Screenplay | null>(null);
+  const [ready, setReady] = useState(false);
   const [titlePage, setTitlePage] = useState<TitlePage>({});
   const [role, setRole] = useState<Role>("VIEWER");
   const [showMeta, setShowMeta] = useState(false);
@@ -42,27 +49,79 @@ export default function EditorPage() {
 
   const editable = canEdit(role);
 
+  // Load metadata + revisions, then connect the collaboration provider.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let rec;
       try {
-        const rec = await getScreenplay(id);
-        if (cancelled) return;
-        setInitialDoc(rec.doc);
-        setTitlePage(rec.doc.titlePage ?? {});
-        setRole(rec.role ?? "VIEWER");
-        docRef.current = rec.doc;
-        revisionsRef.current = rec.revisions ?? [];
-        setRevisionsView(rec.revisions ?? []);
-        setLoadState("ok");
+        rec = await getScreenplay(id);
       } catch {
         if (!cancelled) setLoadState("notfound");
+        return;
+      }
+      if (cancelled) return;
+      setTitlePage(rec.doc.titlePage ?? {});
+      setRole(rec.role ?? "VIEWER");
+      revisionsRef.current = rec.revisions ?? [];
+      setRevisionsView(rec.revisions ?? []);
+      docRef.current = rec.doc;
+      setLoadState("ok");
+
+      // Fetch a collaboration token and connect.
+      let token = "";
+      let url = "ws://localhost:1234";
+      try {
+        const res = await fetch("/api/collab-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ screenplayId: id }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          token = data.token;
+          url = data.url;
+        }
+      } catch {
+        /* fall through to offline mode */
+      }
+
+      const finishInit = () => {
+        if (cancelled || ready) return;
+        initFromScreenplay(doc, rec.doc);
+        setReady(true);
+      };
+
+      if (token) {
+        const p = new HocuspocusProvider({
+          url,
+          name: id,
+          token,
+          document: doc,
+          onSynced: finishInit,
+        });
+        providerRef.current = p;
+        setProvider(p);
+        // Fallback if the collab server can't be reached.
+        setTimeout(finishInit, 5000);
+      } else {
+        finishInit();
       }
     })();
+
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Clean up the provider on unmount.
+  useEffect(() => {
+    return () => {
+      providerRef.current?.destroy();
+      doc.destroy();
+    };
+  }, [doc]);
 
   const scheduleSave = useCallback(() => {
     if (!editable) return;
@@ -74,12 +133,12 @@ export default function EditorPage() {
       } catch (e) {
         setStatus(e instanceof Error ? `Save failed: ${e.message}` : "Save failed");
       }
-    }, 700);
+    }, 900);
   }, [id, editable]);
 
-  const handleEditorChange = useCallback(
-    (doc: Screenplay) => {
-      docRef.current = doc;
+  const handleDocChange = useCallback(
+    (next: Screenplay) => {
+      docRef.current = next;
       scheduleSave();
     },
     [scheduleSave],
@@ -87,12 +146,8 @@ export default function EditorPage() {
 
   const updateMeta = (key: keyof TitlePage, value: string) => {
     if (!editable) return;
-    setTitlePage((prev) => {
-      const next = { ...prev, [key]: value };
-      docRef.current = { ...docRef.current, titlePage: next };
-      scheduleSave();
-      return next;
-    });
+    setTitlePage((prev) => ({ ...prev, [key]: value }));
+    setTitleField(doc, key, value); // syncs to collaborators + triggers save via onDocChange
   };
 
   const saveVersion = async () => {
@@ -149,7 +204,7 @@ export default function EditorPage() {
   if (loadState === "loading") {
     return <main className="p-12 text-neutral-500">Loading…</main>;
   }
-  if (loadState === "notfound" || !initialDoc) {
+  if (loadState === "notfound") {
     return (
       <main className="p-12">
         <p className="mb-4">Screenplay not found, or you don&apos;t have access.</p>
@@ -210,12 +265,16 @@ export default function EditorPage() {
 
       <div className="mx-auto flex max-w-6xl gap-6 px-4 py-6">
         <div className="min-w-0 flex-1">
-          <ScreenplayEditor
-            initialDoc={initialDoc}
-            titlePage={titlePage}
-            onChange={handleEditorChange}
-            readOnly={!editable}
-          />
+          {ready ? (
+            <CollaborativeEditor
+              doc={doc}
+              provider={provider}
+              readOnly={!editable}
+              onDocChange={handleDocChange}
+            />
+          ) : (
+            <p className="text-neutral-500">Connecting to the live document…</p>
+          )}
         </div>
 
         <aside className="hidden w-72 shrink-0 space-y-6 lg:block">
@@ -258,9 +317,7 @@ export default function EditorPage() {
             {revisionsView.length === 0 ? (
               <p className="text-xs text-neutral-400">
                 No versions yet.{" "}
-                {editable
-                  ? "Click “Save version” to record a timestamped, hashed snapshot."
-                  : ""}
+                {editable ? "Click “Save version” to record a timestamped, hashed snapshot." : ""}
               </p>
             ) : (
               <ol className="space-y-2">

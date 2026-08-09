@@ -23,6 +23,11 @@ export class AccessError extends Error {
   }
 }
 
+/** Public wrapper: the acting user's role for a screenplay, or null. */
+export async function getRole(screenplayId: string, userId: string): Promise<Role | null> {
+  return resolveRole(screenplayId, userId);
+}
+
 /** Resolve the acting user's role for a screenplay, or null if no access. */
 async function resolveRole(screenplayId: string, userId: string): Promise<Role | null> {
   const s = await prisma.screenplay.findUnique({

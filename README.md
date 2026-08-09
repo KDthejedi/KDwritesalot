@@ -18,7 +18,7 @@ authorship over time.
 | -------------- | -------------------------------------------------- |
 | Framework      | Next.js (App Router) + TypeScript + Tailwind CSS   |
 | Editor         | TipTap (ProseMirror) with a custom screenplay schema |
-| Real-time      | Yjs (CRDT) + Liveblocks                             |
+| Real-time      | Yjs (CRDT) + Hocuspocus WebSocket server            |
 | Auth           | Auth.js (NextAuth)                                  |
 | Database       | Postgres via Prisma                                |
 | Export         | PDF (pdfkit), Final Draft `.fdx` (XML), Fountain   |
@@ -83,11 +83,29 @@ Built in phases.
 - **Phase 4** — Version history & provenance (snapshots, hash chain, export) ✅
 - **Phase 1/A** — Cloud: Auth.js (Google) + Supabase Postgres, API-backed
   store, sharing with roles, read-only enforcement ✅
-- **Phase B** — Real-time collaboration (Yjs), presence, comments — next.
-- **Phase 6** — Hardening (security review, a11y, broader tests).
+- **Phase B** — Real-time collaboration (Yjs + Hocuspocus): live co-editing,
+  presence, per-role read-only enforcement ✅
+- **Phase 6** — Hardening (security review, a11y, comments UI, broader tests).
 
 ### Sharing & roles
 
 Owners can invite collaborators by email as **Editor** (full edit),
-**Commenter** (read + comment, comments land in Phase B), or **Viewer**
-(read-only). Roles are enforced both in the UI and in every API route.
+**Commenter** (read-only for now; comment threads are the remaining Phase 6
+item), or **Viewer** (read-only). Roles are enforced in the UI, in every API
+route, *and* at the collaboration server (Viewer/Commenter connections are
+read-only).
+
+### Real-time collaboration
+
+Run the Hocuspocus server alongside the app:
+
+```bash
+npm run collab   # ws://localhost:1234, verifies collab tokens with AUTH_SECRET
+npm run dev
+```
+
+Open the same screenplay in two sessions to co-write live with presence
+indicators. The shared document is a Yjs CRDT (character-level merge), persisted
+to Postgres (`CollabDoc`); the canonical `Screenplay` JSON is still saved to
+`Screenplay.content` for export and version history. In production, deploy the
+collab server and set `NEXT_PUBLIC_COLLAB_URL` (use `wss://`).

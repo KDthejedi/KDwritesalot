@@ -154,3 +154,13 @@ model Comment {
 
   @@index([screenplayId])
 }
+
+// Binary Yjs CRDT state for real-time collaboration, keyed by document name
+// (the screenplay id). The Hocuspocus server loads/stores this so the shared
+// document survives everyone disconnecting. The canonical Screenplay JSON is
+// still saved to Screenplay.content for export and version history.
+model CollabDoc {
+  name      String   @id
+  state     Bytes
+  updatedAt DateTime @updatedAt
+}
