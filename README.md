@@ -56,13 +56,30 @@ prisma/schema.prisma Data model
 
 ## Roadmap
 
-Built in phases; see `/root/.claude/plans` for the full plan.
+Built in phases.
 
 - **Phase 0** — Scaffolding ✅
-- **Phase 2a** — Screenplay engine (Fountain / FDX / PDF / provenance)
-- **Phase 1** — Data model, auth, dashboard, CRUD
-- **Phase 2b** — Editor UI with industry formatting behaviors
-- **Phase 3** — Export UI (PDF + FDX with title page)
-- **Phase 4** — Version history & provenance UI
-- **Phase 5** — Real-time collaboration, sharing, comments
-- **Phase 6** — Hardening (security review, a11y, tests, docs)
+- **Phase 2a** — Screenplay engine (Fountain / FDX / PDF / provenance) ✅
+- **Phase 2b** — Editor UI with industry formatting behaviors ✅
+- **Phase 3** — Export (PDF + FDX + Fountain, title page from metadata) ✅
+- **Phase 4** — Version history & provenance (snapshots, hash chain, export) ✅
+- **Phase 1** — Cloud data model (Prisma schema ✅); Auth.js + API-backed
+  store are the next step (needs a database + OAuth credentials).
+- **Phase 5** — Real-time collaboration, sharing, comments (needs Liveblocks).
+- **Phase 6** — Hardening (security review, a11y, broader tests).
+
+### What works today (no external services)
+
+`npm run dev`, open `/dashboard`, create a screenplay, and write with
+Final Draft-style formatting. Save timestamped/hashed versions, and export
+PDF, Final Draft `.fdx`, Fountain, and a JSON provenance record. Screenplays
+are stored in your browser (localStorage).
+
+### Enabling the cloud phase
+
+1. Provision Postgres and set `DATABASE_URL` (see `.env.example`).
+2. `npm run db:push` to create the tables from `prisma/schema.prisma`.
+3. Add Auth.js providers (`AUTH_SECRET`, OAuth id/secret) and swap
+   `lib/store/local.ts` for API routes backed by Prisma — the stored shapes
+   already match the schema.
+4. For real-time co-writing, add Liveblocks keys and layer Yjs onto the editor.
