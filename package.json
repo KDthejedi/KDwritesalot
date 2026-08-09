@@ -1,0 +1,36 @@
+{
+  "name": "kdwritesalot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Collaborative screenplay web app with copyright-ready export and version history",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "next": "^15.5.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.2.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "22.10.7",
+    "@types/react": "19.0.7",
+    "@types/react-dom": "19.0.3",
+    "eslint": "9.18.0",
+    "eslint-config-next": "^15.5.4",
+    "postcss": "8.5.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.7.3",
+    "vitest": "^3.2.7"
+  }
+}
