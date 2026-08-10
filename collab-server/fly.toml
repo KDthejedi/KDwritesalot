@@ -1,0 +1,37 @@
+# Fly.io config for the Marquee real-time collaboration server.
+#
+# Deploy from the repo root:
+#   fly launch --no-deploy --copy-config --dockerfile collab-server/Dockerfile
+#   fly secrets set DATABASE_URL="<supabase-pooled-url>" AUTH_SECRET="<same-as-app>"
+#   fly deploy
+#
+# The public URL is https://<app>.fly.dev; connect the app with
+#   NEXT_PUBLIC_COLLAB_URL="wss://<app>.fly.dev"
+
+app = "marquee-collab"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  COLLAB_PORT = "1234"
+
+[http_service]
+  internal_port = 1234
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # Hocuspocus upgrades HTTP GET to a WebSocket; a plain GET to "/" returns 200.
+  [[http_service.checks]]
+    method = "get"
+    path = "/"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

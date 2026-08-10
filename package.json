@@ -1,8 +1,8 @@
 {
-  "name": "kdwritesalot",
+  "name": "marquee",
   "version": "0.1.0",
   "private": true,
-  "description": "Collaborative screenplay web app with copyright-ready export and version history",
+  "description": "Marquee — collaborative screenplay studio with copyright-ready export and version history",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,22 +13,37 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "collab": "node --env-file=.env collab-server/server.mjs",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.11.3",
+    "@hocuspocus/extension-database": "^4.5.0",
+    "@hocuspocus/provider": "^4.5.0",
+    "@hocuspocus/server": "^4.5.0",
+    "@prisma/client": "^6.19.3",
+    "jose": "^6.2.8",
     "next": "^15.5.4",
+    "next-auth": "^5.0.0-beta.32",
+    "pdfkit": "^0.15.2",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "ws": "^8.21.3",
+    "yjs": "^13.6.32"
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.2.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "22.10.7",
+    "@types/pdfkit": "^0.13.9",
     "@types/react": "19.0.7",
     "@types/react-dom": "19.0.3",
     "eslint": "9.18.0",
     "eslint-config-next": "^15.5.4",
+    "playwright": "^1.62.1",
     "postcss": "8.5.1",
+    "prisma": "^6.19.3",
     "tailwindcss": "^4.3.3",
     "typescript": "5.7.3",
     "vitest": "^3.2.7"

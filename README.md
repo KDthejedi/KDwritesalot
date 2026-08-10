@@ -1,4 +1,4 @@
-# KDwritesalot
+# Marquee
 
 A collaborative screenplay studio for the web. Write in proper industry format,
 co-write in real time, export **copyright-ready** PDF and Final Draft (`.fdx`)
@@ -17,8 +17,8 @@ authorship over time.
 | Concern        | Choice                                             |
 | -------------- | -------------------------------------------------- |
 | Framework      | Next.js (App Router) + TypeScript + Tailwind CSS   |
-| Editor         | TipTap (ProseMirror) with a custom screenplay schema |
-| Real-time      | Yjs (CRDT) + Liveblocks                             |
+| Editor         | Custom structured editor bound to a Yjs document    |
+| Real-time      | Yjs (CRDT) + Hocuspocus WebSocket server            |
 | Auth           | Auth.js (NextAuth)                                  |
 | Database       | Postgres via Prisma                                |
 | Export         | PDF (pdfkit), Final Draft `.fdx` (XML), Fountain   |
@@ -27,13 +27,32 @@ authorship over time.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in as you enable each phase
+cp .env.example .env         # fill in DATABASE_URL/DIRECT_URL + auth
+npm run db:push              # create tables in your Postgres
 npm run dev                  # http://localhost:3000
 ```
 
-The landing page and screenplay **engine** (Fountain, FDX, PDF, provenance) run
-with no external services. Database, auth, and real-time collaboration require
-the environment variables described in `.env.example`.
+The screenplay **engine** (Fountain, FDX, PDF, provenance) runs with no external
+services. Accounts and cloud storage require a Postgres database and Google
+OAuth (below); real-time collaboration additionally needs the Hocuspocus
+server (`npm run collab`).
+
+### Cloud setup (Supabase + Google)
+
+1. **Database** — create a Supabase project; from Project Settings → Database
+   copy the pooled connection string into `DATABASE_URL` (port 6543,
+   `?pgbouncer=true`) and the direct string into `DIRECT_URL` (port 5432). Run
+   `npm run db:push`.
+2. **Google sign-in** — create an OAuth client (Web) in Google Cloud, add
+   redirect URI `<app-url>/api/auth/callback/google`, and set `AUTH_GOOGLE_ID`,
+   `AUTH_GOOGLE_SECRET`, and `AUTH_SECRET` (`openssl rand -base64 32`).
+3. `npm run dev`, open `/dashboard`, sign in, and your screenplays now persist to
+   the database. Share a screenplay from the editor (Editor / Commenter / Viewer
+   roles); invitees must have signed in once so their account exists.
+
+For local development or automated tests without Google, set
+`ENABLE_DEV_LOGIN="true"` (never in production) to enable a passwordless
+Credentials login on `/signin`.
 
 ## Scripts
 
@@ -56,13 +75,56 @@ prisma/schema.prisma Data model
 
 ## Roadmap
 
-Built in phases; see `/root/.claude/plans` for the full plan.
+Built in phases.
 
 - **Phase 0** — Scaffolding ✅
-- **Phase 2a** — Screenplay engine (Fountain / FDX / PDF / provenance)
-- **Phase 1** — Data model, auth, dashboard, CRUD
-- **Phase 2b** — Editor UI with industry formatting behaviors
-- **Phase 3** — Export UI (PDF + FDX with title page)
-- **Phase 4** — Version history & provenance UI
-- **Phase 5** — Real-time collaboration, sharing, comments
-- **Phase 6** — Hardening (security review, a11y, tests, docs)
+- **Phase 2a** — Screenplay engine (Fountain / FDX / PDF / provenance) ✅
+- **Phase 2b** — Editor UI with industry formatting behaviors ✅
+- **Phase 3** — Export (PDF + FDX + Fountain, title page from metadata) ✅
+- **Phase 4** — Version history & provenance (snapshots, hash chain, export) ✅
+- **Phase 1/A** — Cloud: Auth.js (Google) + Supabase Postgres, API-backed
+  store, sharing with roles, read-only enforcement ✅
+- **Phase B** — Real-time collaboration (Yjs + Hocuspocus): live co-editing,
+  presence, per-role read-only enforcement ✅
+- **Phase 6** — Hardening: threaded comments, accessibility, deploy config,
+  security review ✅
+
+### Sharing & roles
+
+Owners can invite collaborators by email as **Editor** (full edit),
+**Commenter** (read-only document, but can post threaded comments), or
+**Viewer** (read-only). Roles are enforced in the UI, in every API route,
+*and* at the collaboration server (Viewer/Commenter connections are read-only).
+
+### Real-time collaboration
+
+Run the Hocuspocus server alongside the app:
+
+```bash
+npm run collab   # ws://localhost:1234, verifies collab tokens with AUTH_SECRET
+npm run dev
+```
+
+Open the same screenplay in two sessions to co-write live with presence
+indicators. The shared document is a Yjs CRDT (character-level merge), persisted
+to Postgres (`CollabDoc`); the canonical `Screenplay` JSON is still saved to
+`Screenplay.content` for export and version history.
+
+## Deployment
+
+See **[DEPLOY.md](./DEPLOY.md)** for a step-by-step guide (Vercel + Supabase +
+Fly.io). In brief:
+
+- **App** → Vercel (or any Node host). Set all the env vars from `.env.example`;
+  run `npx prisma migrate deploy` (or `db:push`) against your database. `pdfkit`
+  is already marked external so its fonts resolve in the server build.
+- **Collab server** → any host that supports long-lived WebSockets
+  (Fly.io / Railway / Render / a container platform). A `Dockerfile` is provided:
+
+  ```bash
+  docker build -f collab-server/Dockerfile -t marquee-collab .
+  docker run -p 1234:1234 --env-file .env marquee-collab
+  ```
+
+  Give it the **same** `DATABASE_URL` and `AUTH_SECRET` as the app, then point
+  the app's `NEXT_PUBLIC_COLLAB_URL` at it over TLS (`wss://your-collab-host`).

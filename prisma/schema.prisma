@@ -1,0 +1,166 @@
+// Data model for the cloud phase (multi-user, real-time collaboration).
+//
+// The local (browser) store in lib/store/local.ts mirrors these shapes, so the
+// UI can move from localStorage to this database-backed model without changing.
+// Enabling the cloud phase: set DATABASE_URL, run `npm run db:push` (or
+// `db:migrate`), then wire Auth.js and swap the store for API routes.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (Supabase PgBouncer, port 6543) for the app.
+  url       = env("DATABASE_URL")
+  // Direct connection (port 5432) used by Prisma Migrate / db push.
+  directUrl = env("DIRECT_URL")
+}
+
+// --- Auth.js (NextAuth) models ------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+
+  ownedScreenplays Screenplay[]   @relation("ScreenplayOwner")
+  collaborations   Collaborator[]
+  revisions        Revision[]
+  comments         Comment[]
+
+  createdAt DateTime @default(now())
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// --- Screenplay domain --------------------------------------------------------
+
+model Screenplay {
+  id      String @id @default(cuid())
+  title   String @default("Untitled Screenplay")
+  ownerId String
+  owner   User   @relation("ScreenplayOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // The full document AST as JSON: { titlePage, elements } (see
+  // lib/screenplay/types.ts). `title` above is denormalized from
+  // content.titlePage.title on save, for cheap list/sort in the dashboard.
+  content Json
+
+  collaborators Collaborator[]
+  revisions     Revision[]
+  comments      Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+enum Role {
+  OWNER
+  EDITOR
+  COMMENTER
+  VIEWER
+}
+
+model Collaborator {
+  id           String     @id @default(cuid())
+  screenplayId String
+  screenplay   Screenplay @relation(fields: [screenplayId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role       @default(VIEWER)
+
+  createdAt DateTime @default(now())
+
+  @@unique([screenplayId, userId])
+  @@index([userId])
+}
+
+// Immutable, append-only revisions forming the authorship / provenance trail.
+model Revision {
+  id           String     @id @default(cuid())
+  screenplayId String
+  screenplay   Screenplay @relation(fields: [screenplayId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id])
+
+  // Full snapshot of the document at this revision (Screenplay JSON).
+  snapshot Json
+  // SHA-256 of the canonical Fountain text (see lib/provenance.ts).
+  contentHash String
+  // Hash chain linking to the previous revision (tamper-evidence).
+  chainHash String
+  label     String?
+  message   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([screenplayId, createdAt])
+}
+
+model Comment {
+  id           String     @id @default(cuid())
+  screenplayId String
+  screenplay   Screenplay @relation(fields: [screenplayId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  threadId String?
+  body     String
+  // Anchor into the document (e.g. element id / offset) as JSON.
+  anchor Json?
+
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([screenplayId])
+}
+
+// Binary Yjs CRDT state for real-time collaboration, keyed by document name
+// (the screenplay id). The Hocuspocus server loads/stores this so the shared
+// document survives everyone disconnecting. The canonical Screenplay JSON is
+// still saved to Screenplay.content for export and version history.
+model CollabDoc {
+  name      String   @id
+  state     Bytes
+  updatedAt DateTime @updatedAt
+}
