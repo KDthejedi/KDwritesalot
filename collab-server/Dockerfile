@@ -11,13 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
 
 WORKDIR /app
 
-# Install dependencies (the collab server needs @hocuspocus/*, @prisma/client, jose).
+# Copy manifests AND the Prisma schema before install: the `postinstall` hook
+# runs `prisma generate`, which needs the schema present. `npm ci` includes dev
+# deps so the Prisma CLI is available for that step.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-
-# Generate the Prisma client from the schema.
 COPY prisma ./prisma
-RUN npx prisma generate
+RUN npm ci
 
 # The server itself.
 COPY collab-server ./collab-server

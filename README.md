@@ -112,6 +112,9 @@ to Postgres (`CollabDoc`); the canonical `Screenplay` JSON is still saved to
 
 ## Deployment
 
+See **[DEPLOY.md](./DEPLOY.md)** for a step-by-step guide (Vercel + Supabase +
+Fly.io). In brief:
+
 - **App** → Vercel (or any Node host). Set all the env vars from `.env.example`;
   run `npx prisma migrate deploy` (or `db:push`) against your database. `pdfkit`
   is already marked external so its fonts resolve in the server build.
