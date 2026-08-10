@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
+import Wordmark from "@/components/Wordmark";
 
 interface Props {
   name: string | null;
@@ -12,8 +13,8 @@ interface Props {
 export default function AppHeader({ name, email, image }: Props) {
   return (
     <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-2 text-sm dark:border-neutral-800 dark:bg-neutral-950">
-      <Link href="/dashboard" className="font-semibold">
-        Marquee
+      <Link href="/dashboard">
+        <Wordmark size={20} />
       </Link>
       <div className="flex items-center gap-3">
         {image ? (
