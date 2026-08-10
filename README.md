@@ -1,4 +1,4 @@
-# KDwritesalot
+# Marquee
 
 A collaborative screenplay studio for the web. Write in proper industry format,
 co-write in real time, export **copyright-ready** PDF and Final Draft (`.fdx`)
@@ -17,7 +17,7 @@ authorship over time.
 | Concern        | Choice                                             |
 | -------------- | -------------------------------------------------- |
 | Framework      | Next.js (App Router) + TypeScript + Tailwind CSS   |
-| Editor         | TipTap (ProseMirror) with a custom screenplay schema |
+| Editor         | Custom structured editor bound to a Yjs document    |
 | Real-time      | Yjs (CRDT) + Hocuspocus WebSocket server            |
 | Auth           | Auth.js (NextAuth)                                  |
 | Database       | Postgres via Prisma                                |
@@ -34,7 +34,8 @@ npm run dev                  # http://localhost:3000
 
 The screenplay **engine** (Fountain, FDX, PDF, provenance) runs with no external
 services. Accounts and cloud storage require a Postgres database and Google
-OAuth (below). Real-time collaboration (Phase B) is not built yet.
+OAuth (below); real-time collaboration additionally needs the Hocuspocus
+server (`npm run collab`).
 
 ### Cloud setup (Supabase + Google)
 
@@ -85,15 +86,15 @@ Built in phases.
   store, sharing with roles, read-only enforcement ✅
 - **Phase B** — Real-time collaboration (Yjs + Hocuspocus): live co-editing,
   presence, per-role read-only enforcement ✅
-- **Phase 6** — Hardening (security review, a11y, comments UI, broader tests).
+- **Phase 6** — Hardening: threaded comments, accessibility, deploy config,
+  security review ✅
 
 ### Sharing & roles
 
 Owners can invite collaborators by email as **Editor** (full edit),
-**Commenter** (read-only for now; comment threads are the remaining Phase 6
-item), or **Viewer** (read-only). Roles are enforced in the UI, in every API
-route, *and* at the collaboration server (Viewer/Commenter connections are
-read-only).
+**Commenter** (read-only document, but can post threaded comments), or
+**Viewer** (read-only). Roles are enforced in the UI, in every API route,
+*and* at the collaboration server (Viewer/Commenter connections are read-only).
 
 ### Real-time collaboration
 
@@ -118,8 +119,8 @@ to Postgres (`CollabDoc`); the canonical `Screenplay` JSON is still saved to
   (Fly.io / Railway / Render / a container platform). A `Dockerfile` is provided:
 
   ```bash
-  docker build -f collab-server/Dockerfile -t kdwritesalot-collab .
-  docker run -p 1234:1234 --env-file .env kdwritesalot-collab
+  docker build -f collab-server/Dockerfile -t marquee-collab .
+  docker run -p 1234:1234 --env-file .env marquee-collab
   ```
 
   Give it the **same** `DATABASE_URL` and `AUTH_SECRET` as the app, then point

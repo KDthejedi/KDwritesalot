@@ -3,7 +3,7 @@ import "./globals.css";
 import AuthSessionProvider from "@/components/providers/SessionProvider";
 
 export const metadata: Metadata = {
-  title: "KDwritesalot — Screenplay Studio",
+  title: "Marquee — Screenplay Studio",
   description:
     "Write screenplays collaboratively, export copyright-ready PDF and Final Draft files, and keep a timestamped version history.",
 };

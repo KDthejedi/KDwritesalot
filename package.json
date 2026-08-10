@@ -1,8 +1,8 @@
 {
-  "name": "kdwritesalot",
+  "name": "marquee",
   "version": "0.1.0",
   "private": true,
-  "description": "Collaborative screenplay web app with copyright-ready export and version history",
+  "description": "Marquee — collaborative screenplay studio with copyright-ready export and version history",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

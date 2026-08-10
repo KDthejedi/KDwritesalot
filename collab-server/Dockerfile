@@ -1,8 +1,8 @@
 # Container for the standalone Hocuspocus real-time collaboration server.
 # Build from the repo root:
-#   docker build -f collab-server/Dockerfile -t kdwritesalot-collab .
+#   docker build -f collab-server/Dockerfile -t marquee-collab .
 # Run (provide the same DATABASE_URL and AUTH_SECRET as the app):
-#   docker run -p 1234:1234 --env-file .env kdwritesalot-collab
+#   docker run -p 1234:1234 --env-file .env marquee-collab
 FROM node:22-slim
 
 # OpenSSL is required by Prisma's query engine.
